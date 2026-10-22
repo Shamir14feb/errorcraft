@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "errorcraft": ["src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "examples"]
+}
