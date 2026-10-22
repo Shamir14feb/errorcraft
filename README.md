@@ -2,7 +2,32 @@
 
 **Craft better errors. Build more reliable applications.**
 
-Errorcraft is a framework-independent TypeScript library for reusable HTTP and application error handling. It provides stable error codes, structured metadata, native `cause` support, and safe serialization—without tying you to Express, Fastify, or any web framework.
+Errorcraft is a lightweight, framework-independent TypeScript library for reusable HTTP and application error handling in Node.js. It helps teams use consistent error classes, stable error codes, contextual metadata, native error causes, and safe serialization—without tying the library to Express, Fastify, or any web framework.
+
+<p align="left">
+  <a href="https://www.npmjs.com/package/errorcraft"><img src="https://img.shields.io/npm/v/errorcraft.svg?style=flat-square" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/errorcraft"><img src="https://img.shields.io/npm/dm/errorcraft.svg?style=flat-square" alt="npm downloads per month"></a>
+  <a href="https://github.com/YOUR_USERNAME/errorcraft/blob/main/LICENSE"><img src="https://img.shields.io/github/license/YOUR_USERNAME/errorcraft?style=flat-square" alt="License"></a>
+  <a href="https://github.com/YOUR_USERNAME/errorcraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/errorcraft/ci.yml?branch=main&style=flat-square" alt="CI status"></a>
+</p>
+
+## Why Errorcraft?
+
+Error handling often becomes inconsistent across projects: classes get duplicated, status codes are repeated, and error responses are shaped differently from service to service.
+
+Errorcraft provides a shared foundation for defining and handling errors consistently. Use its built-in HTTP errors or extend the application-error base class for your own domain-specific failures.
+
+## Features
+
+- **Zero runtime dependencies** — no `http-status` package required.
+- **TypeScript-first** — ships type declarations.
+- **Dual module support** — ESM and CommonJS.
+- **Reusable HTTP errors** — built-in classes with status codes and stable error codes.
+- **Custom application errors** — extend `ApplicationError` for domain-specific failures.
+- **Structured context** — attach optional `data` to errors.
+- **Error causes** — preserve the original failure with native `cause` support.
+- **Explicit serialization** — use `serializeError()` to produce a controlled output.
+- **Framework-independent** — use it in services, scripts, workers, or web applications.
 
 ## Installation
 
@@ -10,19 +35,9 @@ Errorcraft is a framework-independent TypeScript library for reusable HTTP and a
 npm install errorcraft
 ```
 
-## Features
+**Requirements:** Node.js 18 or later.
 
-- Zero runtime dependencies
-- TypeScript-first with shipped declaration files
-- ESM and CommonJS builds
-- Standard HTTP error classes with correct status codes
-- Extensible `ApplicationError` for domain-specific errors
-- Stable machine-readable `code` on every error
-- Optional structured `data` metadata
-- Native `Error` `cause` chaining
-- Explicit, safe `serializeError` for API responses
-
-## Basic usage
+## Quick start
 
 ```typescript
 import { NotFoundError, ValidationError, InternalServerError } from 'errorcraft';
@@ -38,9 +53,11 @@ throw new InternalServerError('Database operation failed', {
 });
 ```
 
+Each error provides a human-readable `message` and a stable machine-readable `code`. HTTP errors also expose a `statusCode`. Errors inherit native JavaScript stack-trace behavior.
+
 ## HTTP errors
 
-Each HTTP error class exposes a readonly `statusCode`, a stable `code`, and a sensible default `message`:
+Errorcraft provides the following HTTP error classes:
 
 | Class                       | Status | Code                     |
 | --------------------------- | -----: | ------------------------ |
@@ -63,19 +80,55 @@ Each HTTP error class exposes a readonly `statusCode`, a stable `code`, and a se
 | `ServiceUnavailableError`   |    503 | `SERVICE_UNAVAILABLE`    |
 | `GatewayTimeoutError`       |    504 | `GATEWAY_TIMEOUT`        |
 
-Use `HttpStatus` when you need numeric constants without throwing:
+Each HTTP error has a readonly `statusCode`, a stable `code`, and a default message that can be overridden when constructing the error.
+
+### Bad requests and validation errors
+
+Use `BadRequestError` when the request is malformed or required information is missing. Use `ValidationError` when a field is present but its value fails validation. Both are useful; choose the one that best describes the failure.
+
+```typescript
+import { BadRequestError, ValidationError } from 'errorcraft';
+
+type RegisterUserInput = {
+  email?: string;
+};
+
+function registerUser(input?: RegisterUserInput) {
+  if (!input || !input.email) {
+    throw new BadRequestError('Email is required', {
+      data: {
+        field: 'email',
+        reason: 'Missing required field',
+      },
+    });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
+    throw new ValidationError('Invalid email address', {
+      data: {
+        field: 'email',
+        reason: 'Invalid email format',
+      },
+    });
+  }
+
+  // Register the user...
+}
+```
+
+Use `HttpStatus` when you need a numeric status constant:
 
 ```typescript
 import { HttpStatus } from 'errorcraft';
 
 if (response.status === HttpStatus.NOT_FOUND) {
-  // ...
+  // Handle a not-found response.
 }
 ```
 
 ## Custom application errors
 
-Extend `ApplicationError` to define domain errors without HTTP semantics:
+Extend `ApplicationError` to define errors for your own application. Application errors do not need to represent an HTTP response.
 
 ```typescript
 import { ApplicationError } from 'errorcraft';
@@ -96,105 +149,134 @@ export class DatabaseError extends ApplicationError {
 }
 ```
 
-See [examples/custom-error.ts](examples/custom-error.ts) for a complete example.
-
-## Error causes
-
-Pass the original failure as `cause` when wrapping errors:
+You can then use your custom error like any other Errorcraft error:
 
 ```typescript
 try {
   await db.query(sql);
-} catch (err) {
-  throw new InternalServerError('Database operation failed', { cause: err });
+} catch (cause) {
+  throw new DatabaseError('Could not load users', {
+    cause,
+    data: {
+      operation: 'loadUsers',
+    },
+  });
 }
 ```
 
-The `cause` is preserved for logging and debugging but is **not** included in default serialization.
+## Error causes
+
+When catching an error and throwing a more meaningful one, pass the original failure as `cause`:
+
+```typescript
+try {
+  await db.query(sql);
+} catch (cause) {
+  throw new InternalServerError('Database operation failed', {
+    cause,
+  });
+}
+```
+
+The outer error describes the operation that failed. Its `cause` preserves the underlying failure for debugging and logging. The outer stack trace and the original cause's stack trace are separate.
+
+## Structured error data
+
+Use `data` to attach additional context to any error:
+
+```typescript
+throw new NotFoundError('User not found', {
+  data: {
+    userId: '42',
+    operation: 'getUser',
+  },
+});
+```
+
+`data` is optional and independent of `cause`:
+
+- `message` describes what went wrong.
+- `code` identifies the error programmatically.
+- `data` provides additional context.
+- `cause` preserves the underlying failure.
+- `stack` helps locate where the error was created.
+
+Avoid putting secrets, credentials, tokens, or other sensitive values in error metadata.
 
 ## Safe serialization
 
-Use `serializeError` to produce a JSON-safe payload for clients:
+Use `serializeError()` when you need a controlled representation of an error, such as an API response payload:
 
 ```typescript
 import { NotFoundError, serializeError } from 'errorcraft';
 
 const error = new NotFoundError('User not found', {
   data: { userId: '42' },
-  cause: new Error('db timeout'),
+  cause: new Error('Database timeout'),
 });
 
 serializeError(error);
-// { name: 'NotFoundError', message: 'User not found', code: 'NOT_FOUND', statusCode: 404 }
+// {
+//   name: 'NotFoundError',
+//   message: 'User not found',
+//   code: 'NOT_FOUND',
+//   statusCode: 404
+// }
 ```
 
-By default, serialization **omits** `stack`, `cause`, and `data`. To include metadata you control, opt in explicitly:
+By default, serialization omits `stack`, `cause`, and `data`. To include metadata explicitly:
 
 ```typescript
 serializeError(error, { includeData: true });
 ```
 
-Only pass `includeData: true` when the metadata is safe to disclose.
+Only opt in to including `data` when you have confirmed it is safe to disclose. Errorcraft does not replace your application's responsibility to choose appropriate HTTP status codes, log errors securely, or decide what information is safe to return to clients.
 
 ## TypeScript support
 
-Errorcraft is written in strict TypeScript. Types are exported for options and serialized shapes:
+Errorcraft is written in strict TypeScript and ships declaration files. Types available from the public entry point include the options and serialized-output types exported by the package, for example:
 
 ```typescript
 import type { ErrorCraftOptions, SerializedError } from 'errorcraft';
 ```
 
+Check the package's public exports for the complete list of supported types.
+
 ## ESM and CommonJS
 
-**ESM:**
+**ESM**
 
 ```typescript
 import { NotFoundError } from 'errorcraft';
+
+throw new NotFoundError('User not found');
 ```
 
-**CommonJS:**
+**CommonJS**
 
 ```javascript
 const { NotFoundError } = require('errorcraft');
+
+throw new NotFoundError('User not found');
 ```
 
-## Node.js versions
+## API overview
 
-Node.js **18+** is required (`engines.node >= 18`).
+### Core classes
 
-## API reference
+- `BaseError` — abstract base class with a stable `code`, optional `data`, and native error behavior.
+- `HttpError` — abstract base class for HTTP errors with a `statusCode`.
+- `ApplicationError` — abstract base class for custom application errors.
+- Built-in HTTP error classes — common client and server errors.
+- `ValidationError` — validation error with status 422 and code `VALIDATION_ERROR`.
 
-### Classes
+### Utilities and constants
 
-- `BaseError` — abstract base with `code`, optional `data`, and `cause`
-- `HttpError` — abstract HTTP base with `statusCode`
-- `ApplicationError` — abstract base for custom application errors
-- HTTP error classes listed in the table above
-- `ValidationError` — validation failures (422, `VALIDATION_ERROR`)
-
-### Functions
-
-- `serializeError(error, options?)` — safe serialization for responses and logs
-
-### Constants and types
-
-- `HttpStatus` — standard HTTP status code constants
-- `HttpStatusCode` — union of status code numbers
-- `ErrorCraftOptions`, `HttpErrorOptions`, `ApplicationErrorOptions`, `BaseErrorOptions`, `SerializedError`, `SerializeErrorOptions`
-
-## Contributing
-
-1. Fork the repository and create a branch.
-2. Install dependencies: `npm install`
-3. Run checks: `npm run lint && npm run typecheck && npm test`
-
-**Git hooks (Husky):**
-
-- **pre-commit:** lint-staged (ESLint fix + Prettier on staged files)
-- **pre-push:** `npm run typecheck` → `npm run build` → `npm test` (tests validate the built `dist/` output)
-
-4. Open a pull request with a clear description of the change.
+- `serializeError(error, options?)` — returns a controlled error representation.
+- `HttpStatus` — HTTP status code constants.
+- `HttpStatusCode` — TypeScript type derived from supported status codes.
+- Options and serialized-output types — see the public exports in the package's `src/index.ts`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Errorcraft is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
