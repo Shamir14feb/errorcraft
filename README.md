@@ -232,6 +232,44 @@ serializeError(error, { includeData: true });
 
 Only opt in to including `data` when you have confirmed it is safe to disclose. Errorcraft does not replace your application's responsibility to choose appropriate HTTP status codes, log errors securely, or decide what information is safe to return to clients.
 
+## Error Handling Utilities
+
+Use `tryCatch()` when a callback may throw or return a Promise that can reject. It always returns a Promise of a discriminated result. Use `tryCatchSync()` for synchronous work only; it returns the result immediately and does not handle rejections from a Promise returned by the callback.
+
+The original thrown or rejected value is returned unchanged on `error`—Errorcraft does not wrap or transform it.
+
+```typescript
+import { tryCatch, tryCatchSync } from 'errorcraft';
+
+async function loadUser(id: string) {
+  const result = await tryCatch(async () => {
+    const response = await fetch(`/api/users/${id}`);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    return response.json();
+  });
+
+  if (!result.ok) {
+    return { user: null, failure: result.error };
+  }
+
+  return { user: result.value, failure: null };
+}
+
+function parseConfig(raw: string) {
+  const result = tryCatchSync(() => JSON.parse(raw) as { port: number });
+
+  if (!result.ok) {
+    return { config: null, failure: result.error };
+  }
+
+  return { config: result.value, failure: null };
+}
+```
+
+Check `result.ok` before reading `value` or `error`. Do not use truthiness on `value` or `error` to infer success—a successful result may legitimately be `null` or `undefined`.
+
 ## TypeScript support
 
 Errorcraft is written in strict TypeScript and ships declaration files. Types available from the public entry point include the options and serialized-output types exported by the package, for example:
@@ -272,6 +310,9 @@ throw new NotFoundError('User not found');
 
 ### Utilities and constants
 
+- `tryCatch(fn)` — runs a sync or async callback and returns `Promise<TryCatchResult<T>>`.
+- `tryCatchSync(fn)` — runs a synchronous callback and returns `TryCatchResult<T>`.
+- `TryCatchResult<T>` — discriminated union with `ok: true` and `value`, or `ok: false` and `error`.
 - `serializeError(error, options?)` — returns a controlled error representation.
 - `HttpStatus` — HTTP status code constants.
 - `HttpStatusCode` — TypeScript type derived from supported status codes.

@@ -36,3 +36,5 @@ export {
 } from './http/errors/server-errors.js';
 
 export { serializeError } from './serialization/serialize-error.js';
+
+export { tryCatch, tryCatchSync, type TryCatchResult } from './utils/try-catch.js';

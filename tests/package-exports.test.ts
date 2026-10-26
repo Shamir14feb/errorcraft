@@ -48,6 +48,22 @@ describe('package exports', () => {
     expect(error.code).toBe('NOT_FOUND');
   });
 
+  it('exports tryCatch helpers from built distribution', async () => {
+    const distUrl = new URL('../dist/index.js', import.meta.url).href;
+    const mod = await import(distUrl);
+    expect(typeof mod.tryCatch).toBe('function');
+    expect(typeof mod.tryCatchSync).toBe('function');
+
+    const syncResult = mod.tryCatchSync(() => 1);
+    expect(syncResult.ok).toBe(true);
+
+    const asyncResult = await mod.tryCatch(async () => 'ok');
+    expect(asyncResult.ok).toBe(true);
+    if (asyncResult.ok) {
+      expect(asyncResult.value).toBe('ok');
+    }
+  });
+
   it('supports CommonJS require from built distribution', () => {
     const require = createRequire(import.meta.url);
     const mod = require(path.join(packageRoot, 'dist/index.cjs'));
