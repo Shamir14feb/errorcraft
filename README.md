@@ -7,8 +7,8 @@ Errorcraft is a lightweight, framework-independent TypeScript library for reusab
 <p align="left">
   <a href="https://www.npmjs.com/package/errorcraft"><img src="https://img.shields.io/npm/v/errorcraft.svg?style=flat-square" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/errorcraft"><img src="https://img.shields.io/npm/dm/errorcraft.svg?style=flat-square" alt="npm downloads per month"></a>
-  <a href="https://github.com/YOUR_USERNAME/errorcraft/blob/main/LICENSE"><img src="https://img.shields.io/github/license/YOUR_USERNAME/errorcraft?style=flat-square" alt="License"></a>
-  <a href="https://github.com/YOUR_USERNAME/errorcraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/errorcraft/ci.yml?branch=main&style=flat-square" alt="CI status"></a>
+  <a href="https://github.com/Shamir14feb/errorcraft/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Shamir14feb/errorcraft?style=flat-square" alt="License"></a>
+  <a href="https://github.com/Shamir14feb/errorcraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Shamir14feb/errorcraft/ci.yml?branch=main&style=flat-square" alt="CI status"></a>
 </p>
 
 ## Why Errorcraft?
