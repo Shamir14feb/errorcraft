@@ -1,6 +1,6 @@
 {
   "name": "errorcraft",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A framework-independent TypeScript library for HTTP and application error handling",
   "license": "MIT",
   "type": "module",
