@@ -326,7 +326,7 @@ import {
   ValidationError,
   ConflictError,
   BaseError,
-} from "errorcraft";
+} from 'errorcraft';
 
 const result = await tryCatch(() => createUser(input));
 
@@ -334,19 +334,19 @@ if (!result.ok) {
   const error = result.error;
 
   if (error instanceof ValidationError) {
-    console.error("Invalid input");
+    console.error('Invalid input');
   } else if (error instanceof ConflictError) {
-    console.error("The user already exists");
+    console.error('The user already exists');
   } else if (error instanceof UnauthorizedError) {
-    console.error("Authentication required");
+    console.error('Authentication required');
   } else if (error instanceof NotFoundError) {
-    console.error("Resource not found");
+    console.error('Resource not found');
   } else if (error instanceof BaseError) {
-    console.error("Other Errorcraft error:", error.code);
+    console.error('Other Errorcraft error:', error.code);
   } else if (error instanceof Error) {
-    console.error("Native error:", error.message);
+    console.error('Native error:', error.message);
   } else {
-    console.error("Non-Error value:", error);
+    console.error('Non-Error value:', error);
   }
 }
 ```
