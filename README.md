@@ -27,6 +27,7 @@ Errorcraft provides a shared foundation for defining and handling errors consist
 - **Structured context** — attach optional `data` to errors.
 - **Error causes** — preserve the original failure with native `cause` support.
 - **Explicit serialization** — use `serializeError()` to produce a controlled output.
+- **Result helpers** — use `tryCatch()` and `tryCatchSync()` for discriminated success and failure results.
 - **Framework-independent** — use it in services, scripts, workers, or web applications.
 
 ## Installation
@@ -234,48 +235,175 @@ Only opt in to including `data` when you have confirmed it is safe to disclose. 
 
 ## Error Handling Utilities
 
-Use `tryCatch()` when a callback may throw or return a Promise that can reject. It always returns a Promise of a discriminated result. Use `tryCatchSync()` for synchronous work only; it returns the result immediately and does not handle rejections from a Promise returned by the callback.
+`tryCatch()` and `tryCatchSync()` run a callback and return a **result object** instead of throwing. They complement Errorcraft’s error classes and [`serializeError()`](#safe-serialization): use the helpers to capture failures, then narrow on `result.ok` before handling `value` or `error`.
 
-The original thrown or rejected value is returned unchanged on `error`—Errorcraft does not wrap or transform it.
+Both utilities share the same discriminated result type:
 
 ```typescript
-import { tryCatch, tryCatchSync } from 'errorcraft';
+export type TryCatchResult<T> = { ok: true; value: T } | { ok: false; error: unknown };
+```
 
-async function loadUser(id: string) {
-  const result = await tryCatch(async () => {
-    const response = await fetch(`/api/users/${id}`);
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
-    return response.json();
-  });
+Public signatures:
 
-  if (!result.ok) {
-    return { user: null, failure: result.error };
+```typescript
+function tryCatch<T>(fn: () => T | Promise<T>): Promise<TryCatchResult<T>>;
+
+function tryCatchSync<T>(fn: () => T): TryCatchResult<T>;
+```
+
+**Result object pattern**
+
+- When `ok` is `true`, the operation succeeded and `value` holds the result (including `null`, `undefined`, or `void`).
+- When `ok` is `false`, the operation failed and `error` holds the **original** thrown or rejected value.
+- Use `if (result.ok)` / `if (!result.ok)` for TypeScript narrowing. Do not infer success from the truthiness of `value` or `error`.
+
+**Why `error` is `unknown`**
+
+JavaScript allows throwing any value, not only `Error` instances:
+
+```typescript
+throw new Error('Something failed');
+throw 'Something failed';
+throw null;
+throw { code: 'PAYMENT_FAILED' };
+```
+
+`error` is typed as `unknown` because the helpers preserve whatever was thrown—they do not wrap, convert, or normalize it into an `Error`. Narrow before use:
+
+```typescript
+import { NotFoundError } from 'errorcraft';
+
+if (!result.ok) {
+  if (result.error instanceof NotFoundError) {
+    // Handle a specific Errorcraft error.
+  } else if (result.error instanceof Error) {
+    console.error(result.error.message);
+  } else {
+    console.error('A non-Error value was thrown:', result.error);
   }
-
-  return { user: result.value, failure: null };
-}
-
-function parseConfig(raw: string) {
-  const result = tryCatchSync(() => JSON.parse(raw) as { port: number });
-
-  if (!result.ok) {
-    return { config: null, failure: result.error };
-  }
-
-  return { config: result.value, failure: null };
 }
 ```
 
-Check `result.ok` before reading `value` or `error`. Do not use truthiness on `value` or `error` to infer success—a successful result may legitimately be `null` or `undefined`.
+### `tryCatch()`
+
+Pass the work as a **function** so synchronous exceptions during invocation and asynchronous Promise rejections are both caught inside the helper.
+
+`getUserById` below is an illustrative application function—not part of Errorcraft.
+
+```typescript
+import { tryCatch, NotFoundError } from 'errorcraft';
+
+const result = await tryCatch(async () => {
+  const user = await getUserById('123');
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  return user;
+});
+
+if (result.ok) {
+  console.log(result.value);
+} else if (result.error instanceof NotFoundError) {
+  console.error('User not found');
+} else {
+  console.error('Operation failed:', result.error);
+}
+```
+
+`tryCatch()` always returns a `Promise<TryCatchResult<T>>`, even when the callback is synchronous.
+
+### Handling Multiple Error Types
+
+When a callback can throw several Errorcraft classes (or other values), assign `result.error` after narrowing with `!result.ok`, then branch with `instanceof`. `fetchUser` is an illustrative application function—not exported by Errorcraft.
+
+```typescript
+import {
+  tryCatch,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+  ConflictError,
+  BaseError,
+} from "errorcraft";
+
+const result = await tryCatch(() => createUser(input));
+
+if (!result.ok) {
+  const error = result.error;
+
+  if (error instanceof ValidationError) {
+    console.error("Invalid input");
+  } else if (error instanceof ConflictError) {
+    console.error("The user already exists");
+  } else if (error instanceof UnauthorizedError) {
+    console.error("Authentication required");
+  } else if (error instanceof NotFoundError) {
+    console.error("Resource not found");
+  } else if (error instanceof BaseError) {
+    console.error("Other Errorcraft error:", error.code);
+  } else if (error instanceof Error) {
+    console.error("Native error:", error.message);
+  } else {
+    console.error("Non-Error value:", error);
+  }
+}
+```
+
+**Order of checks**
+
+- `if (!result.ok)` narrows the result so `error` is available on the failure branch.
+- `error instanceof NotFoundError` (and similar) identifies a specific Errorcraft class.
+- Check **specific HTTP/application subclasses before `BaseError`**, because subclasses also satisfy `instanceof BaseError`.
+- The final `else` handles strings, `null`, plain objects, and other non-`Error` values—`tryCatch()` preserves the original thrown value as `unknown`, and not every failure is an `Error` instance.
+
+> **Note:** Keep `instanceof Error` **last** among the `instanceof` branches (immediately before the non-`Error` `else`). Errorcraft errors extend `BaseError`, which extends the native `Error` class—so every `NotFoundError`, `ValidationError`, and other library error is also an `instanceof Error`. If you test `instanceof Error` too early, those failures are handled as generic JavaScript errors and the specific Errorcraft branches never run.
+
+- `instanceof Error` — use this for native JavaScript errors that are **not** Errorcraft errors (after all `BaseError` / HTTP class checks).
+
+For structured logging or API responses after you have handled the failure, call `serializeError(error)` separately (see [With `serializeError()`](#with-serializeerror) below).
+
+### `tryCatchSync()`
+
+Use for synchronous work such as parsing or in-memory transformations. The result is returned immediately; the helper does **not** `await` Promises and does **not** catch rejections that happen later on a Promise returned from the callback.
+
+```typescript
+import { tryCatchSync } from 'errorcraft';
+
+const result = tryCatchSync(() => JSON.parse('{"name":"Errorcraft"}'));
+
+if (result.ok) {
+  console.log(result.value.name);
+} else {
+  console.error('Invalid JSON:', result.error);
+}
+```
+
+### With `serializeError()`
+
+`TryCatchResult` does not include a serialized error field. Serialization stays opt-in via [`serializeError()`](#safe-serialization), which accepts `unknown` and applies the library’s safe defaults (see [Safe serialization](#safe-serialization) for `includeData`).
+
+```typescript
+import { serializeError, tryCatch } from 'errorcraft';
+
+const result = await tryCatch(() => performOperation());
+
+if (!result.ok) {
+  const serialized = serializeError(result.error);
+  console.error(serialized);
+}
+```
+
+- `result.error` — original thrown value (any type).
+- `serializeError(result.error)` — controlled `SerializedError` shape for logging or responses; non-`BaseError` values are not turned into Errorcraft error classes automatically.
 
 ## TypeScript support
 
 Errorcraft is written in strict TypeScript and ships declaration files. Types available from the public entry point include the options and serialized-output types exported by the package, for example:
 
 ```typescript
-import type { ErrorCraftOptions, SerializedError } from 'errorcraft';
+import type { ErrorCraftOptions, SerializedError, TryCatchResult } from 'errorcraft';
 ```
 
 Check the package's public exports for the complete list of supported types.
@@ -310,10 +438,10 @@ throw new NotFoundError('User not found');
 
 ### Utilities and constants
 
-- `tryCatch(fn)` — runs a sync or async callback and returns `Promise<TryCatchResult<T>>`.
+- `tryCatch(fn)` — runs a callback and returns `Promise<TryCatchResult<T>>` (sync or async).
 - `tryCatchSync(fn)` — runs a synchronous callback and returns `TryCatchResult<T>`.
-- `TryCatchResult<T>` — discriminated union with `ok: true` and `value`, or `ok: false` and `error`.
-- `serializeError(error, options?)` — returns a controlled error representation.
+- `TryCatchResult<T>` — `{ ok: true, value }` or `{ ok: false, error: unknown }`.
+- `serializeError(error, options?)` — safe serialization; see [Safe serialization](#safe-serialization).
 - `HttpStatus` — HTTP status code constants.
 - `HttpStatusCode` — TypeScript type derived from supported status codes.
 - Options and serialized-output types — see the public exports in the package's `src/index.ts`.
