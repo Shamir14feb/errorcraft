@@ -1,8 +1,36 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-*.tgz
-.DS_Store
+
+# Test and coverage
 coverage/
+.vite/
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and secrets
 .env
 .env.*
+!.env.example
+
+# npm pack output
+*.tgz
+
+# TypeScript / lint caches
+*.tsbuildinfo
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code — ignore local editor files, keep shared settings
+.vscode/*
+!.vscode/settings.json
