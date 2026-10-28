@@ -1,0 +1,9 @@
+{
+  "json.schemaDownload.enable": true,
+  "json.schemastore.org": [
+    {
+      "fileMatch": ["package.json"],
+      "url": "https://json.schemastore.org/package.json"
+    }
+  ]
+}
